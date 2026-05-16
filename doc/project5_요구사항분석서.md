@@ -1,12 +1,13 @@
 # DevTrack 요구사항 분석서
 
 **문서번호:** DevTrack-REQ-001  
-**버전:** v1.0  
+**버전:** v1.1  
 **파일 경로:** doc/project5_요구사항분석서.md  
 
 | 버전 | 날짜 | 작성자 | 변경사항 |
 |------|------|--------|----------|
-| v1.0 | 2025-05-09 | dayeoniiiki | 최초 작성 |
+| v1.0 | 2025-05-09 | 팀원 | 최초 작성 |
+| v1.1 | 2025-05-16 | 팀원 | 리뷰 반영: U_06/U_08/U_09 예외 흐름 추가, 클래스 다이어그램 Requirement-Member 관계 보완 |
 
 ---
 
@@ -227,6 +228,11 @@ UML 기반 객체지향 분석 방법론을 적용하여 기능 모델링(유스
 2. [저장] 또는 드래그-앤-드롭으로 상태를 변경한다.
 3. 시스템은 상태를 갱신하고 PM에게 알림(U_09)을 발송한다.
 
+**Alternate / Exceptional Flows** *(v1.1 추가)*
+- 2.a1: 자신에게 할당되지 않은 이슈의 상태를 변경하려 할 경우 시스템은 '권한이 없습니다' 메시지를 출력하고 변경을 차단한다.
+- 2.a2: 이미 Done 상태인 이슈를 To Do로 되돌리려 할 경우 PM 승인 요청 알림을 발송한다.
+- 3.a1: 알림 발송(U_09) 중 이메일 서버 오류가 발생한 경우 인앱 알림만 발송하고 이메일 재시도 큐에 등록한다.
+
 ---
 
 #### U_07 – 산출물 등록하기
@@ -270,6 +276,11 @@ UML 기반 객체지향 분석 방법론을 적용하여 기능 모델링(유스
 1. 시스템은 현재 스프린트의 완료율, 이슈 상태 분포, 번다운 차트를 렌더링한다.
 2. 사용자는 기간 필터를 변경하여 과거 스프린트 통계를 조회할 수 있다.
 
+**Alternate / Exceptional Flows** *(v1.1 추가)*
+- 1.a1: 아직 스프린트가 생성되지 않은 프로젝트의 경우 '진행 중인 스프린트가 없습니다' 안내 메시지를 표시한다.
+- 1.a2: 데이터 집계 중 서버 오류가 발생한 경우 마지막으로 캐시된 통계를 표시하고 '일부 데이터가 최신이 아닐 수 있습니다' 경고를 출력한다.
+- 2.a1: 조회 기간에 해당하는 스프린트 데이터가 없는 경우 '해당 기간의 데이터가 없습니다' 메시지를 표시한다.
+
 ---
 
 #### U_09 – 알림 발송하기
@@ -289,6 +300,11 @@ UML 기반 객체지향 분석 방법론을 적용하여 기능 모델링(유스
 
 1. 시스템은 이벤트를 감지하면 해당 프로젝트의 관련 멤버를 조회한다.
 2. 시스템은 인앱 알림과 이메일 알림을 생성하여 발송한다.
+
+**Alternate / Exceptional Flows** *(v1.1 추가)*
+- 1.a1: 알림 대상 멤버가 프로젝트에서 이미 탈퇴한 경우 해당 멤버는 수신 목록에서 제외하고 나머지 멤버에게만 발송한다.
+- 2.a1: 이메일 서버 연결 실패 시 인앱 알림만 즉시 발송하고, 이메일은 최대 3회 재시도 후 실패 로그를 기록한다.
+- 2.a2: 알림 대상 멤버가 알림 수신을 비활성화한 경우 해당 유형의 알림 발송을 건너뛴다.
 
 ---
 
@@ -317,6 +333,8 @@ UML 기반 객체지향 분석 방법론을 적용하여 기능 모델링(유스
 
 ### 3.1 정적 분석 (클래스 다이어그램)
 
+> **v1.1 변경:** Requirement ↔ Member, Member ↔ Project 관계 명시적으로 보완
+
 ```
 Class DevTrack
 
@@ -332,34 +350,46 @@ Class DevTrack
 │ +create()    │            │ +create()    │            │──────────────│
 │ +update()    │            │ +start()     │            │ +update()    │
 │ +delete()    │            │ +complete()  │            │ +assign()    │
-└──────────────┘            └──────────────┘            └──────────────┘
+└──────┬───────┘            └──────────────┘            └──────┬───────┘
        │ 1                                                      │ 0..*
-       │ 0..*                                                   │
-┌──────────────┐                                        ┌──────────────┐
-│ Requirement  │                                        │   Artifact   │
-│──────────────│                                        │──────────────│
-│ -id          │                                        │ -id          │
-│ -title       │                                        │ -name        │
-│ -type        │                                        │ -type        │
-│ -priority    │                                        │ -path        │
-│ -status      │                                        │──────────────│
-│──────────────│                                        │ +upload()    │
-│ +add()       │                                        │ +delete()    │
-│ +update()    │                                        └──────────────┘
-└──────────────┘
-       │ 1
-       │ 1..*
-┌──────────────┐            ┌──────────────┐
-│    Member    │            │ Notification │
-│──────────────│            │──────────────│
+       │ 0..*  [has-parts]                                      │
+┌──────┴───────┐                                       ┌────────┴─────┐
+│ Requirement  │──────────────(연관)───────────────────│   Artifact   │
+│──────────────│                                       │──────────────│
+│ -id          │                                       │ -id          │
+│ -title       │                                       │ -name        │
+│ -type        │                                       │ -type        │
+│ -priority    │                                       │ -path        │
+│ -status      │                                       │──────────────│
+│ -reviewer    │ ← [검토 담당 Member, 0..1]             │ +upload()    │
+│──────────────│                                       │ +delete()    │
+│ +add()       │                                       └──────────────┘
+│ +update()    │
+│ +linkIssue() │
+└──────┬───────┘
+       │ 0..1  (assignedReviewer)
+       │
+┌──────┴───────┐            ┌──────────────┐
+│    Member    │────────────│ Notification │
+│──────────────│ 1    0..*  │──────────────│
 │ -userId      │            │ -id          │
 │ -name        │            │ -type        │
 │ -email       │            │ -message     │
 │ -role        │            │ -isRead      │
-│──────────────│            │──────────────│
-│ +invite()    │            │ +send()      │
-│ +updateRole()│            │ +markRead()  │
-└──────────────┘            └──────────────┘
+│ -notifEnabled│            │──────────────│
+│──────────────│            │ +send()      │
+│ +invite()    │            │ +markRead()  │
+│ +updateRole()│            └──────────────┘
+└──────┬───────┘
+       │ 다대다
+       │ [한 Member는 여러 Project에 참여 가능]
+    Project
+
+※ 관계 보완 설명 (v1.1)
+- Requirement ↔ Member : Requirement는 PM 역할의 Member가 등록·승인하며,
+  assignedReviewer(0..1) 속성으로 검토 담당 멤버를 선택적으로 지정할 수 있음.
+- Member ↔ Project : 한 명의 Member는 여러 Project에 참여 가능 (다대다 연관).
+  Project는 반드시 1명 이상의 Member(PM)를 보유해야 함.
 ```
 
 ### 3.2 CRC 카드
@@ -462,9 +492,11 @@ Class DevTrack
 - type : Enum {Functional, NonFunctional}
 - priority : Enum {High, Mid, Low}
 - status : Enum {Proposed, Approved, Implemented}
+- assignedReviewer : Member (0..1) ← *v1.1 추가*
 
 **Relationships**
 - Other Associations: Project, Issue
+- Other Associations: Member (검토 담당 PM과의 연관) ← *v1.1 추가*
 
 ---
 
@@ -484,9 +516,11 @@ Class DevTrack
 - name : String
 - email : String
 - role : Enum {PM, Developer, Viewer}
+- notificationEnabled : bool ← *v1.1 추가*
 
 **Relationships**
-- Other Associations: Project, Issue
+- Other Associations: Project (다대다 — 한 멤버가 여러 프로젝트에 참여 가능) ← *v1.1 보완*
+- Other Associations: Issue, Requirement
 
 ---
 
@@ -562,7 +596,6 @@ sd 스프린트_계획 (U_04 + U_05)
     |          |──createSprint()──>|             |               |
     |          |              |──save()──────────────────────>|
     |          |              |<───success────────────────────|
-    |          |              |                |               |
     |  ┌──────────────────────────────────────────────┐
     |  │  <<include>> U_05 이슈 할당하기               │
     |──백로그이슈선택──>|              |                |
